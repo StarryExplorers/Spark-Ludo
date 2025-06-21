@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Spark’s Ludo 👑</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      width: 90vmin;
+      height: 90vmin;
+      border: 5px solid #333;
+      margin-top: 20px;
+      position: relative;
+    }
+    .cell {
+      border: 1px solid #aaa;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    .safe { background-color: #e0ffe0; }
+    .start { font-size: 1.5em; text-align: center; background-color: #ffffe0; }
+    .center {
+      grid-column: 7 / span 3;
+      grid-row: 7 / span 3;
+      background: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2em;
+      font-weight: bold;
+    }
+    .piece {
+      width: 60%;
+      padding-top: 60%;
+      border-radius: 50%;
+      position: absolute;
+      top: 20%;
+      left: 20%;
+      box-shadow: 0 0 2px #000;
+      cursor: pointer;
+    }
+    .red { background: #cc0000; }
+    .green { background: #009933; }
+    .yellow { background: #e6e600; }
+    .blue { background: #0066cc; }
+    #player-setup { margin-top: 20px; text-align: center; }
+    .btn {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .btn:hover { background: #222; }
+    #dice-area {
+      margin-top: 20px;
+      font-size: 24px;
+      text-align: center;
+    }
+    #roll-btn {
+      font-size: 20px;
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    #roll-btn:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+
+  <div id="player-setup">
+    <h2>Choose Number of Players</h2>
+    <button class="btn" onclick="startGame(2)">2 Players</button>
+    <button class="btn" onclick="startGame(3)">3 Players</button>
+    <button class="btn" onclick="startGame(4)">4 Players</button>
+  </div>
+
+  <div id="dice-area" style="display:none;">
+    <div id="turn-indicator">🔄</div>
+    <div id="dice-display">🎲</div>
+    <button id="roll-btn" onclick="rollDice()">Roll Dice</button>
+  </div>
+
+  <div class="board" id="ludo-board">
+    <div class="cell center" style="z-index: 1;">★</div>
+  </div>
+
+  <script>
+    let players = [];
+    let currentPlayerIndex = 0;
+    let currentRoll = 0;
+    let selectedPiece = null;
+    let pieces = {};
+    let boardCells = [];
+    const safePositions = [2, 9, 14, 27, 32, 39, 48, 51];
+    const homePositions = {
+      red: 100,
+      green: 200,
+      yellow: 300,
+      blue: 400
+    };
+
+    function startGame(numPlayers) {
+      const allColors = ['Red', 'Green', 'Yellow', 'Blue'];
+      players = allColors.slice(0, numPlayers);
+      document.getElementById('player-setup').style.display = 'none';
+      document.getElementById('dice-area').style.display = 'block';
+      createBoard();
+      placePieces();
+      updateTurnIndicator();
+    }
+
+    function updateTurnIndicator() {
+      const player = players[currentPlayerIndex];
+      const emojiMap = { Red: '🔴', Green: '🟢', Yellow: '🟡', Blue: '🔵' };
+      document.getElementById('turn-indicator').innerText = `${emojiMap[player]} ${player}'s Turn`;
+    }
+
+    function rollDice() {
+      currentRoll = Math.floor(Math.random() * 6) + 1;
+      document.getElementById('dice-display').innerText = `🎲 ${currentRoll}`;
+    }
+
+    function createBoard() {
+      const board = document.getElementById('ludo-board');
+      for (let i = 1; i <= 52; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.setAttribute('data-position', i);
+        if (safePositions.includes(i)) {
+          cell.classList.add('safe');
+          cell.innerHTML = '⭐';
+        }
+        board.appendChild(cell);
+        boardCells[i] = cell;
+      }
+    }
+
+    function placePieces() {
+      const colors = ['red', 'green', 'yellow', 'blue'];
+      colors.forEach(color => {
+        const piece = document.createElement('div');
+        piece.className = `piece ${color}`;
+        piece.dataset.color = color;
+        piece.dataset.steps = '-1';
+        piece.dataset.finished = 'false';
+        piece.addEventListener('click', () => selectPiece(piece));
+        document.querySelector('.cell.center').appendChild(piece);
+        pieces[color] = piece;
+      });
+    }
+
+    function selectPiece(piece) {
+      const currentColor = players[currentPlayerIndex].toLowerCase();
+      if (piece.dataset.color !== currentColor || piece.dataset.finished === 'true') return;
+      if (parseInt(piece.dataset.steps) === -1 && currentRoll !== 6) return; // must roll 6 to unlock
+      selectedPiece = piece;
+      movePiece();
+    }
+
+    function movePiece() {
+      if (!selectedPiece || currentRoll === 0) return;
+      let steps = parseInt(selectedPiece.dataset.steps);
+      if (steps === -1 && currentRoll === 6) {
+        steps = 0; // unlock piece
+      } else {
+        steps += currentRoll;
+      }
+
+      if (steps >= 51) {
+        selectedPiece.dataset.finished = 'true';
+        selectedPiece.style.display = 'none';
+        alert(`${selectedPiece.dataset.color.toUpperCase()} reached home!`);
+        checkWinCondition();
+      } else {
+        selectedPiece.dataset.steps = steps;
+        const cellIndex = ((colorOffset(selectedPiece.dataset.color) + steps) % 52) + 1;
+        const cell = boardCells[cellIndex];
+        if (cell) {
+          const others = cell.querySelectorAll('.piece');
+          others.forEach(p => {
+            if (p !== selectedPiece && p.dataset.color !== selectedPiece.dataset.color && !cell.classList.contains('safe')) {
+              p.dataset.steps = -1;
+              p.dataset.finished = 'false';
+              p.style.display = 'block';
+              document.querySelector('.cell.center').appendChild(p);
+            }
+          });
+          cell.appendChild(selectedPiece);
+        }
+      }
+
+      selectedPiece = null;
+      currentRoll = 0;
+      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      updateTurnIndicator();
+    }
+
+    function colorOffset(color) {
+      const map = { red: 0, green: 13, yellow: 26, blue: 39 };
+      return map[color];
+    }
+
+    function checkWinCondition() {
+      const finished = Object.values(pieces).filter(p => p.dataset.finished === 'true');
+      if (finished.length === players.length) {
+        alert('🎉 GAME OVER! All players reached home!');
+        location.reload();
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
